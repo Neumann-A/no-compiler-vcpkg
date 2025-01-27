@@ -1,0 +1,13 @@
+{
+    "dependencies": [
+        {
+            "name": "compiler-msvc",
+            "platform": "windows"
+        },
+        {
+            "name": "compiler-llvm",
+            "platform": "windows"
+        },
+        "fmt"
+    ]
+}

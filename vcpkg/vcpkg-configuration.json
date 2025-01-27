@@ -1,0 +1,5 @@
+{
+  "default-registry": null,
+  "overlay-ports": [ "D:/vcpkg_folders/no_msvc/ports" ],
+  "overlay-triplets": [ "D:/vcpkg_folders/no_msvc/triplets" ]
+}
