@@ -7,13 +7,22 @@ Param(
     [String]
     $Triplet = $HostTriplet,
     [String]
-    $ManifestDir = "./vcpkg",
+    $ManifestDir = (Join-Path -Path $PSScriptRoot -ChildPath "vcpkg"),
     [String]
     $VcpkgRootDir = (Join-Path -Path $PSScriptRoot -ChildPath "vcpkg"),
     [String]
+    $BuildDir = (Join-Path -Path $PSScriptRoot -ChildPath "bld"),
+    [String]
+    $VcpkgInstalledDir = (Join-Path -Path $BuildDir -ChildPath "vcpkg_installed"),
+    [Array]
     $ManifestFeatures = @()
-
 )
+
+$vcpkg_root=$VcpkgRootDir
+$vcpkg_installed=$VcpkgInstalledDir
+$vcpkg_overlay_ports="$ManifestDir/overlay-ports"
+$vcpkg_overlay_triplets="$ManifestDir/overlay-triplets"
+
 
 function global:deactivate ([switch]$NonDestructive) {
     # Revert to original values
@@ -51,17 +60,17 @@ function global:deactivate ([switch]$NonDestructive) {
     }
 }
 
-function script:configure_toolchain {
+function script:create_toolchain_loader() {
     # Define placeholders and their values
     $placeholders = @{
-        "@VCPKG_INSTALLED_DIR@"   = "MyProject"
+        "@VCPKG_INSTALLED_DIR@"   = $VcpkgInstalledDir -replace '\\', '/'
         "@VCPKG_TARGET_TRIPLET@" = "$Triplet"
         "@VCPKG_HOST_TRIPLET@" = "$HostTriplet"
-        "@VCPKG_CHAINLOAD_TOOLCHAIN_FILE@" = "1.0.0"
+        "@VCPKG_CHAINLOAD_TOOLCHAIN_FILE@" = "$vcpkg_overlay_triplets/$Triplet/$Triplet-toolchain.cmake" -replace '\\', '/'
     }
 
     # Load the template file
-    $template = Get-Content -Path "config.template" -Raw
+    $template = Get-Content -Path "vcpkg.toolchain.loader.template.cmake" -Raw
 
     # Replace placeholders with actual values
     foreach ($placeholder in $placeholders.Keys) {
@@ -69,9 +78,9 @@ function script:configure_toolchain {
     }
 
     # Write the configured file
-    $template | Set-Content -Path "config.h"
+    $template | Set-Content -Path "$vcpkg_installed/$Triplet/vcpkg.toolchain.loader.cmake"
 
-    Write-Host "Configuration file generated: config.h"
+    return "$vcpkg_installed/$Triplet/vcpkg.toolchain.loader.cmake"
 }
 
 deactivate -nondestructive
@@ -94,32 +103,32 @@ if (-not $Env:VCPKG_ENV_DISABLE_PROMPT) {
 
 Copy-Item -Path Env:PATH -Destination Env:_OLD_PATH
 
-
-if (-not (Test-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "vcpkg/vcpkg.exe"))) {
+$vcpkg_exe = (Join-Path -Path $VcpkgRootDir -ChildPath "vcpkg.exe")
+if (-not (Test-Path -Path $vcpkg_exe)) {
   Invoke-WebRequest -Uri https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/vcpkg-init/vcpkg-init.ps1 `
-                    -OutFile (Join-Path -Path $PSScriptRoot -ChildPath "vcpkg/vcpkg-init.ps1")
+                    -OutFile "$VcpkgRootDir/vcpkg-init.ps1"
 
-  New-Item -Path ".\vcpkg\.vcpkg-root" -ItemType File -Force
+  New-Item -Path "$VcpkgRootDir\.vcpkg-root" -ItemType File -Force
 }
 
-. .\vcpkg\vcpkg-init.ps1
+. $VcpkgRootDir\vcpkg-init.ps1
 
 $Env:VCPKG_FORCE_DOWNLOADED_BINARIES = 1
 
 if (-not $env:VCPKG_DOWNLOADS) {
-    $env:VCPKG_DOWNLOADS = Join-Path -Path $PSScriptRoot -ChildPath "vcpkg/downloads"
+    $env:VCPKG_DOWNLOADS = Join-Path -Path $VcpkgRootDir -ChildPath "downloads"
     $res = New-Item -Path $Env:VCPKG_DOWNLOADS -ItemType "directory" -Force
 }
 
 if (-not $env:VCPKG_DEFAULT_BINARY_CACHE) {
-    $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path -Path $PSScriptRoot -ChildPath "vcpkg/cache"
+    $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path -Path $VcpkgRootDir -ChildPath "cache"
     $res = New-Item -Path $Env:VCPKG_DEFAULT_BINARY_CACHE -ItemType "directory" -Force
 }
 
-$Env:X_VCPKG_REGISTRIES_CACHE = (Join-Path -Path $PSScriptRoot -ChildPath "vcpkg/registries") # Needs to be set for 'vcpkg fetch' for some reason
+$Env:X_VCPKG_REGISTRIES_CACHE = (Join-Path -Path $VcpkgRootDir -ChildPath "registries") # Needs to be set for 'vcpkg fetch' for some reason
 $res = New-Item -Path $Env:X_VCPKG_REGISTRIES_CACHE -ItemType "directory" -Force
 
-$vcpkg_exe = ".\vcpkg\vcpkg.exe"
+
 $paths = @{}
 $tools = @("cmake", "ninja", "git")
 foreach ($tool in $tools) {
@@ -127,10 +136,6 @@ foreach ($tool in $tools) {
     $paths[$tool] = Split-Path ($toolPath.Trim())
     $env:PATH = "$($env:PATH);$($paths[$tool])"
 }
-$vcpkg_root=$VcpkgRootDir
-$vcpkg_installed="./bld/vcpkg"
-$vcpkg_overlay_ports="./vcpkg/overlay-ports"
-$vcpkg_overlay_triplets="./vcpkg/overlay-triplets"
 
 $env:VCPKG_DEFAULT_TRIPLET=$Triplet
 $env:VCPKG_DEFAULT_HOST_TRIPLET=$HostTriplet
@@ -159,7 +164,10 @@ Write-Host "Running vcpkg install..."
 #                ${VCPKG_INSTALL_OPTIONS}
 
 Write-Host "Setting up environment ..."
-. ./$vcpkg_installed/$vcpkg_host_triplet/env-setup/llvm-env.ps1
+. $vcpkg_installed/$HostTriplet/env-setup/llvm-env.ps1
 
+$cmake_toolchain = create_toolchain_loader 
 
+Write-Host "CMake Toolchain generated at: $cmake_toolchain"
+Write-Output $cmake_toolchain
 #Write-Host $manifest_install
