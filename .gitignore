@@ -1,0 +1,7 @@
+
+/bld
+/vcpkg
+
+!/vcpkg/vcpkg.json
+!/vcpkg/vcpkg-configuration.json
+
