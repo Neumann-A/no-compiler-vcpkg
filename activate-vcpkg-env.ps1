@@ -78,9 +78,9 @@ function script:create_toolchain_loader() {
     }
 
     # Write the configured file
-    $template | Set-Content -Path "$vcpkg_installed/$Triplet/vcpkg.toolchain.loader.cmake"
+    $template | Set-Content -Path "$vcpkg_installed/vcpkg.$Triplet-toolchain.loader.cmake"
 
-    return "$vcpkg_installed/$Triplet/vcpkg.toolchain.loader.cmake"
+    return "$vcpkg_installed/vcpkg.$Triplet-toolchain.loader.cmake"
 }
 
 deactivate -nondestructive
@@ -92,7 +92,7 @@ if (-not $Env:VCPKG_ENV_DISABLE_PROMPT) {
 
     function global:_OLD_PROMPT_NAME { "" }
     Copy-Item -Path function:prompt -Destination function:_OLD_PROMPT_NAME
-    New-Variable -Name _VCPKG_PROMPT_PREFIX -Description "vcpkg environment prompt prefix" -Scope Global -Option ReadOnly -Visibility Public -Value $Prompt
+    New-Variable -Name _VCPKG_PROMPT_PREFIX -Description "vcpkg environment prompt prefix" -Scope Global -Option ReadOnly -Visibility Public -Value "$Prompt - Host:$HostTriplet - Target:$Triplet"
 
     function global:prompt {
         Write-Host -NoNewline -ForegroundColor Green "($_VCPKG_PROMPT_PREFIX) "
@@ -152,22 +152,15 @@ Write-Host "Running vcpkg install..."
   "--x-no-default-features" `
   "--feature-flags=$manifest_features" `
   "--overlay-ports=$vcpkg_overlay_ports" `
-  "--overlay-triplets=$vcpkg_overlay_triplets" | Write-Host
-#            COMMAND "${Z_VCPKG_EXECUTABLE}" install
-#                --triplet "${VCPKG_TARGET_TRIPLET}"
-#                --vcpkg-root "${Z_VCPKG_ROOT_DIR}"
-#                "--x-wait-for-lock"
-#                "--x-manifest-root=${VCPKG_MANIFEST_DIR}"
-#                "--x-install-root=${_VCPKG_INSTALLED_DIR}"
-#                ${Z_VCPKG_FEATURE_FLAGS}
-#                ${Z_VCPKG_ADDITIONAL_MANIFEST_PARAMS}
-#                ${VCPKG_INSTALL_OPTIONS}
+  "--overlay-triplets=$vcpkg_overlay_triplets" `
+  "--no-print-usage" | Write-Host
 
 Write-Host "Setting up environment ..."
-. $vcpkg_installed/$HostTriplet/env-setup/llvm-env.ps1
+. $vcpkg_overlay_triplets/$Triplet.env.ps1 -VcpkgInstalledDir $vcpkg_installed
 
 $cmake_toolchain = create_toolchain_loader 
 
-Write-Host "CMake Toolchain generated at: $cmake_toolchain"
-Write-Output $cmake_toolchain
+#Write-Host "CMake Toolchain generated at: $cmake_toolchain"
+#Write-Output $cmake_toolchain
+$env:CMAKE_TOOLCHAIN_FILE = $cmake_toolchain
 #Write-Host $manifest_install

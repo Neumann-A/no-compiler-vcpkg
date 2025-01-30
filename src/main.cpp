@@ -1,4 +1,4 @@
-#include <fmt/fmt.h>
+#include <fmt/format.h>
 
 int main() {
     fmt::print("Hello, world!\n");
